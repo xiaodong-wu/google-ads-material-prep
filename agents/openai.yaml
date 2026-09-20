@@ -1,0 +1,4 @@
+interface:
+  display_name: "谷歌广告资料准备"
+  short_description: "逐基础词调用关键词技能并独立建表，汇总广告规划与市场资料"
+  default_prompt: "使用 $google-ads-material-prep 分析网站和多个基础词，逐词调用 $google-ads-keyword-to-sheets 获取CSV，每词单独一个子表再汇总，完成01–09的8份Excel和1份HTML。"
