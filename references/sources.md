@@ -10,15 +10,19 @@
 | 02 | https://support.google.com/google-ads/answer/2497941 | 受众群体与系列适用范围 |
 | 03 | https://support.google.com/google-ads/answer/7684791 | RSA描述≤90、双宽计数、单条广告资源数 |
 | 04 | https://support.google.com/google-ads/answer/2375416 | 站内链接，链接文字≤25 |
+| 04 | https://www.wordstream.com/google-ads-preview-tool | 用户指定的公开预览入口；非官方规则或审核证明 |
 | 04 | https://developers.google.com/google-ads/api/reference/rpc/v22/SitelinkAsset | 两行说明各≤35；使用时核对现行版本 |
 | 05 | https://support.google.com/google-ads/answer/6079510 | Callout≤25及双宽规则 |
+| 05 原始链接 | https://support.google.com/google-ads/answer/6077124 | 用户指定入口，当前标题Introduction，实际为动态再营销设置简介，不能作为Callout规则 |
 | 06 | https://support.google.com/google-ads/answer/9470665 | 原流程表单入口，使用时核验 |
 | 06 | https://support.google.com/google-ads/answer/16726130 | 创建表单的官方步骤 |
 | 06 | https://developers.google.com/google-ads/api/reference/rpc/v22/LeadFormAsset | 表单字段、隐私政策及CTA；使用时核对现行版本 |
 | 07 | https://support.google.com/google-ads/answer/6280012 | 允许的结构化摘要标头 |
 | 07 | https://support.google.com/adspolicy/answer/6283300 | Models/Service catalog/Types语义要求 |
 
-2026-09-20建Skill时核验：原 `answer/6324971` 为“Create a campaign”，不是RSA规则；原 `answer/6077124` 为“Introduction”，故采用上表对应主题页。`9470665` 未成功抓取；`16726130` 检索可见，但正文遇429。原流程Headline≤30、Description≤200保留为制作上限；Business Name、CTA及提交反馈限制执行时继续核验。
+2026-09-20本轮更新核验：`2497941`、`7684791`、`2375416`、`6079510`、`16726130`、`6280012`及结构化摘要政策页可读取。`6077124`仍是动态再营销“Introduction”，因此保留用户原链接并使用对应Callout主题页。`9470665`及WordStream预览入口本轮抓取失败；Market Finder跳转`/intl/en_us/`，未取得实际市场查询结果。原流程Headline≤30、Description≤200保留为制作上限；Business Name、CTA及提交反馈限制执行时继续核验，不将页面可访问等同字段上限已确认。
+
+03的“每栏目5条”“每栏目至少2条数据化卖点”“约1/3强CTA”是用户制作要求，非Google平台最低数量要求；单个RSA官方上限仍为4条描述、每条90字符。5条按栏目交付为备选素材池，使用时选取。旧`answer/6324971`为Create a campaign，不用作RSA规则。
 
 ## 原流程公开工具与市场入口
 

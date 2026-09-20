@@ -32,9 +32,28 @@ REPORT_FOOTER_LINKS = (
     "https://trends.google.com/trends/",
 )
 FORBIDDEN = re.compile(r"\b(?:near(?:by)?|me|prices?|pricing|cheap(?:er|est)?|free|old|second[ -]+hand|jobs?|diy|repair(?:ed|ing|s)?)\b", re.I)
-CTA = re.compile(r"\b(?:get (?:a |your )?quote|request (?:a |your )?(?:quote|sample|demo)|contact us|learn more|explore|discover|browse|shop|order|ask us|talk to|speak to|download|book)\b", re.I)
+CTA = re.compile(r"\b(?:get (?:a |your )?quote|request (?:a |your )?(?:quote|sample|demo|consultation)|contact us|shop now|order now|ask us|talk to|speak to|download (?:the |our |a )?(?:catalog|guide|datasheet)|book (?:a |your )?(?:call|demo|consultation))\b", re.I)
 FORM_FIELDS = ["Headline", "Business Name", "Description", "Collected Info", "Privacy Policy URL", "CTA Type", "CTA Description", "Submission Headline", "Submission Description"]
 COUNTS = {"03": (2, 3), "05": (1, 2), "06": (1, 3), "07": (2, 3)}
+AUDIENCE_DIMENSIONS = {
+    "核心受众分类": ("商业模式定位", "目标客户类型", "重点行业"),
+    "关键决策者与使用者画像": ("采购与决策角色", "核心痛点与需求", "关键购买因素"),
+    "实际应用场景与技术诉求": ("典型应用场景", "技术与功能偏好"),
+    "地理与区域市场定位": ("目标区域", "市场定位"),
+    "受众总结与营销建议": ("受众总结", "营销建议"),
+}
+EXTRA_SHEETS = {
+    "02": {"audience_analysis": ("五维分析", ["分析维度", "分析项", "分析结论", "依据类型", "证据与推断说明", "参考链接"])},
+    "03": {
+        "site_hierarchy": ("网站层级", ["页面ID", "页面类型", "层级", "父页面ID", "栏目路径", "Final URL", "文案目标", "证据或缺口说明", "参考链接"]),
+        "numeric_claims": ("卖点证据", ["广告语序号", "数据化卖点原文", "指标类型", "指标单位与适用范围", "来源原文摘录", "核验说明", "参考链接"]),
+    },
+}
+PAGE_TYPES = ("品牌与信息", "产品分类", "产品线", "重要页面", "功能页面", "导航分组")
+NUMERIC_TYPES = ("产品规格", "产品范围计数", "服务指标", "业务规模", "经验年限")
+NUMERIC_VALUE = re.compile(r"\b\d+(?:[.,]\d+)*\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|hundred|thousand|dual|triple|single)\b", re.I)
+MODEL_ONLY = re.compile(r"[A-Za-z]+[- ]?\d+[A-Za-z0-9]*(?:\s+\d+[A-Za-z]*)?", re.I)
+COPY_VIEW_HEADERS = ["栏目与广告语", "中文翻译或说明"]
 
 
 class ReportStructure(HTMLParser):
@@ -162,8 +181,168 @@ def schema(steps):
         item = {"filename": filename(step), "columns": SPECS[step][1], "rows": [], "notes": []}
         if step == "01":
             item.update(seed_columns=SEEDS, seeds=[], seed_tables=[])
+        for key, (_, headers) in EXTRA_SHEETS.get(step, {}).items():
+            item[key] = []
+            item[key + "_columns"] = headers
         data["sheets"][step] = item
     return data
+
+
+def auxiliary_rows(item, step, key, errors):
+    """Validate auxiliary tables before business checks or workbook creation."""
+    rows = item.get(key)
+    label, headers = EXTRA_SHEETS[step][key]
+    if not isinstance(rows, list):
+        errors.append(f"{step}: 缺少{key}数组（{label}）")
+        return []
+    valid = []
+    for i, row in enumerate(rows, 1):
+        if (not isinstance(row, list) or len(row) != len(headers)
+                or any(isinstance(v, bool) or not isinstance(v, (str, int)) or not str(v).strip() for v in row)):
+            errors.append(f"{step} {label}第{i}行: 需要{len(headers)}个非空文本/整数字段")
+            continue
+        if any(not is_url(url) for url in str(row[-1]).split("\n")):
+            errors.append(f"{step} {label}第{i}行: 参考链接格式错误")
+        valid.append(row)
+    return valid
+
+
+def validate_audience(item, errors, warnings, coverage):
+    rows = auxiliary_rows(item, "02", "audience_analysis", errors)
+    counts, seen, content_seen = {}, set(), set()
+    previous_dimension = -1
+    for row in rows:
+        dimension, topic = row[:2]
+        if dimension not in AUDIENCE_DIMENSIONS or topic not in AUDIENCE_DIMENSIONS[dimension]:
+            errors.append("02: 未知分析维度或分析项")
+            continue
+        order = list(AUDIENCE_DIMENSIONS).index(dimension)
+        if order < previous_dimension:
+            errors.append("02: 五维分析须按指定维度顺序组织")
+        previous_dimension = order
+        key = (dimension, topic)
+        content_key = (dimension, topic, keyword_key(row[2]))
+        if content_key in content_seen:
+            errors.append("02: 总结、建议或分析内容重复")
+        content_seen.add(content_key)
+        counts[key] = counts.get(key, 0) + 1
+        if key in seen and dimension != "受众总结与营销建议":
+            errors.append("02: 分析项重复，请在同一结论内说明相关角色/场景")
+        seen.add(key)
+        if row[3] not in ("网站事实", "用户提供", "分析推断", "待验证"):
+            errors.append("02: 依据类型须区分网站事实、用户提供、分析推断或待验证")
+        if row[3] == "待验证":
+            warnings.append("02: 待验证分析项：" + topic)
+    for dimension, topics in AUDIENCE_DIMENSIONS.items():
+        for topic in topics:
+            if not counts.get((dimension, topic)):
+                errors.append(f"02: 缺少{dimension} / {topic}")
+    summaries = counts.get(("受众总结与营销建议", "受众总结"), 0)
+    advice = counts.get(("受众总结与营销建议", "营销建议"), 0)
+    if not 3 <= summaries <= 4:
+        errors.append("02: 受众总结须为3–4行，每行一句")
+    if not 2 <= advice <= 3:
+        errors.append("02: 营销建议须为2–3条")
+    coverage.update(dimensions=len({row[0] for row in rows}), summary_sentences=summaries, marketing_recommendations=advice)
+
+
+def validate_descriptions(item, rows, gap, errors, warnings, coverage):
+    hierarchy = auxiliary_rows(item, "03", "site_hierarchy", errors)
+    claims = auxiliary_rows(item, "03", "numeric_claims", errors)
+    if not hierarchy:
+        errors.append("03: 须先提供网站层级，不能仅交付固定条数广告语")
+    pages, paths, targets, urls = {}, set(), {}, set()
+    for row in hierarchy:
+        page_id, kind, level, parent, path, url, target, reason, _ = row
+        if not all(isinstance(v, str) for v in (page_id, kind, parent, path, url, target)):
+            errors.append("03: 页面ID、父ID、栏目路径、URL等须为字符串")
+            continue
+        if page_id in pages or page_id == "ROOT" or path in paths:
+            errors.append("03: 页面ID或完整栏目路径重复/无效")
+        pages[page_id] = row
+        paths.add(path)
+        if kind not in PAGE_TYPES or type(level) is not int or level < 0:
+            errors.append("03: 页面类型或层级无效")
+        if target not in ("生成", "不生成"):
+            errors.append("03: 文案目标须为生成或不生成")
+        if target == "生成":
+            if not is_url(url):
+                errors.append("03: 文案目标页面须有真实HTTP(S) URL")
+            if url in urls:
+                errors.append("03: 同一目标URL不能重复建栏目凑数")
+            urls.add(url)
+            targets[path] = row
+        elif not is_url(url) and not (kind == "导航分组" and url == "无独立页面"):
+            errors.append("03: 非页面导航节点须写明无独立页面，其余须有URL")
+    for page_id, row in pages.items():
+        level, parent = row[2:4]
+        if parent == "ROOT":
+            if level != 0:
+                errors.append("03: ROOT下节点层级须为0")
+        elif parent not in pages or parent == page_id:
+            errors.append("03: 父页面ID不存在或指向自身")
+        elif type(level) is int and type(pages[parent][2]) is int and level != pages[parent][2] + 1:
+            errors.append("03: 子层级必须比父节点大1")
+    if not targets:
+        gap("没有可生成文案的已发现栏目；需继续解析网站")
+    ads, grouped = {}, {path: [] for path in targets}
+    for row in rows:
+        if type(row[0]) is not int or row[0] < 1 or row[0] in ads:
+            errors.append("03: 广告语序号必须为唯一正整数")
+            continue
+        ads[row[0]] = row
+        if row[1] not in targets:
+            errors.append("03: 广告语栏目不在网站层级的生成目标内：" + str(row[1]))
+        else:
+            grouped[row[1]].append(row)
+    numeric_ids, claim_seen = set(), set()
+    for claim in claims:
+        ad_id, text, kind = claim[:3]
+        if type(ad_id) is not int or ad_id not in ads:
+            errors.append("03: 卖点证据引用了不存在的广告语序号")
+            continue
+        if not isinstance(text, str) or text not in str(ads[ad_id][2]):
+            errors.append("03: 数据化卖点须逐字出现在对应英文广告语中")
+            continue
+        if kind not in NUMERIC_TYPES or not NUMERIC_VALUE.search(text) or MODEL_ONLY.fullmatch(text):
+            errors.append("03: 数字卖点须为可量化指标，不能只用型号/标准编号凑数")
+            continue
+        key = (ad_id, text.casefold())
+        if key in claim_seen:
+            errors.append("03: 同一广告语的卖点证据重复")
+        claim_seen.add(key)
+        numeric_ids.add(ad_id)
+    per_page = []
+    for path, ads_for_page in grouped.items():
+        actual = len(ads_for_page)
+        numeric = sum(r[0] in numeric_ids for r in ads_for_page)
+        ctas = sum(bool(CTA.search(str(r[2]))) for r in ads_for_page)
+        per_page.append({"page": path, "target": 5, "actual": actual, "numeric_target": 2, "numeric_actual": numeric, "cta_detected": ctas})
+        if actual > 5:
+            errors.append(f"03: {path}每个栏目只生成5条，实际{actual}")
+        elif actual < 5:
+            gap(f"{path}目标5条，实际{actual}，缺口{5-actual}")
+        if numeric < 2:
+            gap(f"{path}数据化卖点广告目标至少2条，实际{numeric}，缺口{2-numeric}；须补事实证据")
+    ctas = sum(bool(CTA.search(str(r[2]))) for r in rows)
+    cta_range = (len(rows) // 3, math.ceil(len(rows) / 3))
+    coverage.update(target=len(targets) * 5, page_count=len(targets), per_page=per_page,
+                    numeric_ads=len(numeric_ids), cta_detected=ctas, cta_target_range=list(cta_range))
+    if rows and not cta_range[0] <= ctas <= cta_range[1]:
+        gap(f"强CTA目标约1/3（{cta_range[0]}–{cta_range[1]}条），实际检测{ctas}；人工复核表达")
+
+
+def description_view(item):
+    """Readable per-section output; the flat sheet remains the authoritative data."""
+    result = []
+    for index, page in enumerate((p for p in item["site_hierarchy"] if p[6] == "生成"), 1):
+        ads = [r for r in item["rows"] if r[1] == page[4]]
+        result.append([f"{index}. {page[4]}", page[5]])
+        for number, row in enumerate(ads, 1):
+            result.append([f'广告语 {number}: "{row[2]}" (字符数: {row[3]})', row[4]])
+        if len(ads) < 5:
+            result.append([f"待补充：目标5条，实际{len(ads)}条", page[7]])
+    return result
 
 
 def validate(data, steps, recalculate=False):
@@ -187,7 +366,7 @@ def validate(data, steps, recalculate=False):
             (warnings if notes else errors).append(step + ": " + message + ("" if notes else "；须在notes说明原因"))
 
         coverage[step] = {"actual": len(rows)}
-        target = {"01": 30, "02": 5, "03": 20, "04": 20, "05": 10, "09": 1}.get(step)
+        target = {"01": 30, "02": 1, "04": 20, "05": 10, "09": 1}.get(step)
         if target:
             coverage[step]["target"] = target
             if len(rows) < target or (step in ("03", "04", "05") and len(rows) != target):
@@ -216,7 +395,7 @@ def validate(data, steps, recalculate=False):
                         errors.append(label + f": 第{j+1}列为空")
             if any(not is_url(link) for link in str(row[-1] or "").split("\n")):
                 errors.append(label + ": 参考链接须为逐行HTTP(S) URL")
-            limits = {"03": [(2, 70, 90)], "04": [(2, 1, 25), (3, 1, 35), (4, 1, 35)], "05": [(1, 1, 25)], "07": [(2, 1, 25)]}.get(step, [])
+            limits = {"03": [(2, 1, 90)], "04": [(2, 1, 25), (3, 1, 35), (4, 1, 35)], "05": [(1, 1, 25)], "07": [(2, 1, 25)]}.get(step, [])
             if step == "06":
                 limit = {"Headline": 30, "Description": 200}.get(str(row[0]))
                 if isinstance(row[2], int) and row[2] > 0:
@@ -332,11 +511,10 @@ def validate(data, steps, recalculate=False):
                     errors.append("01: 汇总词无法回溯基础词子表：" + str(row[1]))
             coverage[step]["seed_sheet_actual"] = len(tables)
             coverage[step]["seed_statuses"] = statuses
+        if step == "02":
+            validate_audience(item, errors, warnings, coverage[step])
         if step == "03":
-            ctas = sum(bool(CTA.search(str(r[2]))) for r in valid)
-            coverage[step]["cta_detected"] = ctas
-            if not 6 <= ctas <= 7:
-                warnings.append(f"03: 检测到{ctas}条CTA，人工核对是否约1/3")
+            validate_descriptions(item, valid, gap, errors, warnings, coverage[step])
         if step == "06":
             for name in FORM_FIELDS:
                 if name not in {r[0] for r in valid}:
@@ -398,6 +576,23 @@ def build(data, steps, out, replace=False):
             wb = Workbook()
             wb.active.title = "资料"
             write_sheet(wb.active, SPECS[step][1], item["rows"])
+            for key, (title, headers) in EXTRA_SHEETS.get(step, {}).items():
+                write_sheet(wb.create_sheet(title), headers, item[key])
+            if step == "03":
+                ws = wb.create_sheet("栏目文案", 0)
+                write_sheet(ws, COPY_VIEW_HEADERS, description_view(item))
+                from openpyxl.styles import Font, PatternFill
+                for row in ws.iter_rows(min_row=2):
+                    if re.match(r"^\d+\. ", str(row[0].value)):
+                        for cell in row:
+                            cell.fill = PatternFill("solid", fgColor="16324F")
+                            cell.font = Font(bold=True, color="FFFFFF")
+                wb.active = 0
+                notes.append("每个栏目5条是备选描述素材池；单个RSA最多选择4条描述。字符计数包含空格与标点。")
+                for page in result["coverage"]["03"]["per_page"]:
+                    notes.append(f"{page['page']}：描述目标5、实际{page['actual']}；数据化卖点广告目标至少2、实际{page['numeric_actual']}；强CTA检测{page['cta_detected']}。")
+            if step == "02":
+                wb.active = wb.sheetnames.index("五维分析")
             if step == "01":
                 write_sheet(wb.create_sheet("基础词"), SEEDS, item.get("seeds", []))
                 tables = {keyword_key(t["seed"]): t for t in item["seed_tables"]}
@@ -436,6 +631,15 @@ def check(out, steps, require_html=False):
             if any(c.data_type == "f" for ws in wb for row in ws for c in row):
                 file_errors.append(path.name + ": 存在公式单元格")
             item = {"rows": [list(r) for r in values[1:]], "notes": []}
+            for key, (title, headers) in EXTRA_SHEETS.get(step, {}).items():
+                extra = list(wb[title].values)
+                if list(extra[0]) != headers:
+                    file_errors.append(path.name + ": 附表表头错误 " + title)
+                item[key] = [list(r) for r in extra[1:]]
+            if step == "03":
+                displayed = list(wb["栏目文案"].values)
+                if list(displayed[0]) != COPY_VIEW_HEADERS or [list(r) for r in displayed[1:]] != description_view(item):
+                    file_errors.append(path.name + ": 栏目文案展示与资料行不一致")
             if "说明" in wb.sheetnames:
                 item["notes"] = [r[0] for r in list(wb["说明"].values)[1:] if r[0]]
             if step == "01":
@@ -482,7 +686,7 @@ def check(out, steps, require_html=False):
             result["errors"].extend(check_report_html(html))
         except OSError as exc:
             result["errors"].append("08: 无法读取HTML: " + str(exc))
-    result["scope"] = "结构、数量、长度、链接格式、每词子表及指标摘要；不证明实际Google Ads查询、事实、URL可访问或平台审核通过"
+    result["scope"] = "结构、数量、长度、链接、关键词子表、五维受众及逐栏目文案/卖点证据关联；不证明实际查询、全站发现完整性、事实真实性、语法或平台审核通过"
     return result
 
 
