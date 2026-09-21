@@ -1,37 +1,65 @@
 # Google Ads Material Prep
 
-根据目标网站和多个基础关键词，生成8份Excel及1份HTML谷歌广告准备资料。文案默认英文，研究说明默认中文；仅准备本地资料，不创建或发布广告。
+Prepare Google Ads campaign materials from a target website and multiple seed keywords. The skill produces **eight Excel workbooks and one HTML report**, using English ad copy and Chinese research commentary by default. It prepares local files; it does not create or publish ads.
 
-## 安装
+## Installation
 
-将本仓库放到 `~/.codex/skills/google-ads-material-prep/`。关键词步骤还需安装 [Google Ads Keywords to Sheets or CSV](https://github.com/xiaodong-wu/google-ads-keyword-to-sheets)。
+Install this skill and its required keyword dependency, [Google Ads Keywords to Sheets or CSV](https://github.com/xiaodong-wu/google-ads-keyword-to-sheets), in your Codex skills directory. For a fresh installation:
 
-需要可控制已登录Chrome的工具（例如Codex的`mcp__cua_repl`）、可使用Keyword Planner并下载CSV的Google Ads账号，以及带`openpyxl`的Python环境。`chrome:control-chrome`是可选方案，不是硬性依赖。
+```bash
+git clone https://github.com/xiaodong-wu/google-ads-material-prep.git "${CODEX_HOME:-$HOME/.codex}/skills/google-ads-material-prep"
+git clone https://github.com/xiaodong-wu/google-ads-keyword-to-sheets.git "${CODEX_HOME:-$HOME/.codex}/skills/google-ads-keyword-to-sheets"
+```
 
-## 调用
+Restart Codex if the skills are not discovered immediately.
 
-在Codex中输入：
+### Requirements
 
-> 使用 $google-ads-material-prep，为 https://example.com/ 生成谷歌广告准备资料。基础词：product one、product two；语言English，地区全球。每个基础词一个子表。
+- A supported tool that can control a signed-in Chrome session, such as Codex's `mcp__cua_repl`. The older `chrome:control-chrome` skill is optional, not a mandatory dependency.
+- A Google Ads account that can use Keyword Planner and download keyword ideas as CSV.
+- Python 3.9 or later with `openpyxl` available in the environment used to run the workbook helper.
 
-01逐词查询真实Google Ads数据、导出完整指标CSV，再合并去重与分组。网址仅用于业务分析及落地页匹配，不作为Keyword Planner的网站筛选。
+## Usage
 
-## 输出
+In Codex, enter:
 
-默认写入当前目录下的`谷歌广告建组与市场调研资料/`，不同品牌使用独立子目录：
+```text
+Use $google-ads-material-prep to prepare all Google Ads materials for https://example.com/.
+Seed keywords: product one, product two.
+Keyword language: English. Location: All locations.
+Create a separate worksheet for each seed keyword, then consolidate the campaign plan.
+```
 
-1. 关键词规划表（每基础词独立子表＋汇总）
-2. 目标受众画像分析（五维报告＋角色明细，3–4句总结、2–3条建议）
-3. 谷歌广告描述语（全站层级＋每栏目5条≤90字符描述，约1/3强CTA，每栏目至少2条有证据的数字卖点）
-4. 谷歌广告站内链接
-5. 谷歌广告宣传信息
-6. 潜在客户表单设置
-7. 结构化摘要扩展
-8. 海外市场与海关宏观报告（单文件HTML，严格五个核心维度）
-9. 谷歌广告投放国家推荐
+Step 01 queries real Google Ads data for each seed separately, exports all source metric columns, and then consolidates, deduplicates, and groups the results. Each seed retains its own worksheet, including a clearly identified empty or blocked result when applicable.
 
-来源、原始关键词CSV、逐词调用状态与检查结果保存在输出目录的`_核验/`。无法取得的数据明确标注待验证或受阻，不用模型生成数字补齐。静态校验不等于Google Ads审核通过。
+The target website is used only for business analysis and landing-page matching. It is never entered into Keyword Planner's website filter. The standard material-preparation workflow uses local CSV exports and does not require Google Sheets.
 
-完整操作要求见[SKILL.md](SKILL.md)，数据格式与检查命令见[导出说明](references/export.md)。
+## Deliverables
 
-03不再固定20条或要求至少70字符；数量由真实栏目决定。数字/认证/交期不足时报告证据缺口，不补造承诺。更新前的02/03需按新数据契约补充附表后重新生成；仅升级技能不会改写已有客户文件。
+By default, files are saved in a dedicated output directory within the current workspace, with separate subdirectories for unrelated brands. Filenames and audit-folder names follow the skill's existing naming convention.
+
+| Step | File type | Contents |
+| --- | --- | --- |
+| 01 | Excel | Keyword plan: one worksheet per seed plus a consolidated plan. |
+| 02 | Excel | Audience analysis across five dimensions, role profiles, a 3-4 sentence summary, and 2-3 recommendations. |
+| 03 | Excel | Site hierarchy and five English descriptions per target section or important page. Each description is at most 90 characters, including spaces; approximately one third include a strong CTA. Each section requires at least two descriptions with evidence-backed numerical selling points. |
+| 04 | Excel | Google Ads sitelink assets. |
+| 05 | Excel | Google Ads callout assets. |
+| 06 | Excel | Lead form settings and copy. |
+| 07 | Excel | Structured snippet assets. |
+| 08 | HTML | A styled, responsive, self-contained overseas market and trade report covering exactly five core dimensions. |
+| 09 | Excel | Recommended advertising countries and regions, supported by the market report. |
+
+The HTML report covers global market size and CAGR, Google search trends and geographic interest, import demand and purchasing markets, trade policies and compliance requirements, and competition and market concentration. Country tiers and bidding recommendations belong in the separate country-recommendation workbook.
+
+## Evidence and validation
+
+Sources, original keyword CSVs, per-seed execution status, and validation results are retained in the output's audit subdirectory. Missing data is marked as pending verification or blocked; the skill does not invent figures to fill gaps. Static validation does not establish Google Ads approval.
+
+Description counts depend on the site's actual sections. Step 03 no longer uses a fixed total of 20 descriptions or a 70-character minimum. When numerical claims, certifications, or delivery commitments lack evidence, the skill reports the shortfall instead of fabricating promises.
+
+See [SKILL.md](SKILL.md) for the complete workflow and [Export instructions](references/export.md) for input schemas and validation commands.
+
+## Updating existing materials
+
+Older step 02 and step 03 workbooks must be regenerated with the supplementary worksheets required by the current data contract. Updating the skill alone does not rewrite existing client files.
